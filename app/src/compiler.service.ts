@@ -18,7 +18,7 @@ export class CompilerService {
         'go',
     ] as const;
 
-    routeToCompiler(language: string, code: string): CompilationResult {
+    async routeToCompiler(language: string, code: string): Promise<CompilationResult> {
         const normalizedLanguage = language.toLowerCase().trim();
 
         if (!this.SUPPORTED_LANGUAGES.includes(normalizedLanguage as any)) {
@@ -29,10 +29,10 @@ export class CompilerService {
 
         switch (normalizedLanguage) {
             case 'javascript':
-                return this.jsCompiler.compileJS(code);
+                return await this.jsCompiler.compileJS(code);
 
             case 'typescript':
-                return this.tsCompiler.compileTS(code);
+                return await this.tsCompiler.compileTS(code);
 
             default:
                 throw new BadRequestException(
