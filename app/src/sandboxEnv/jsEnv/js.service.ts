@@ -3,16 +3,38 @@ import { CompilationResult } from '../../interfaces/compilationResult.interface'
 
 @Injectable()
 export class JSCompilerService {
-    //TODO: Implement the execution env
-    compileJS(code: string): CompilationResult {
-        return {
-            success: true,
-            output: '',
-            error: '',
-            exitCode: 0,
-            executionTime: Date.now(),
-            language: 'JavaScript',
-            timestamp: new Date(),
-        };
+    async compileJS(code: string): Promise<CompilationResult> {
+        return new Promise((resolve) => {
+            const { spawn } = require('child_process');
+            const child = spawn('docker', ['run', '--rm', '-i', 'node:alpine', 'node']);
+
+            let output = '';
+            let error = '';
+            const startTime = Date.now();
+
+            child.stdout.on('data', (data) => {
+                output += data.toString();
+            });
+
+            child.stderr.on('data', (data) => {
+                error += data.toString();
+            });
+
+            child.on('close', (code) => {
+                const endTime = Date.now();
+                resolve({
+                    success: code === 0,
+                    output: output,
+                    error: error,
+                    exitCode: code || 0,
+                    executionTime: endTime - startTime,
+                    language: 'JavaScript',
+                    timestamp: new Date(),
+                });
+            });
+
+            child.stdin.write(code);
+            child.stdin.end();
+        });
     }
 }
