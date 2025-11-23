@@ -11,7 +11,7 @@ export class TSCompilerService {
             error: '',
             exitCode: 0,
             executionTime: Date.now(),
-            language: 'JavaScript',
+            language: 'TypeScript',
             timestamp: new Date(),
         };
     }
