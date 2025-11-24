@@ -1,105 +1,190 @@
 import { Injectable } from '@nestjs/common';
 import { CompilationResult } from '../../interfaces/compilationResult.interface';
+import { JSCompilerService } from '../jsEnv/js.service';
+import * as ts from 'typescript';
 
 @Injectable()
 export class TSCompilerService {
-    async compileTS(code: string): Promise<CompilationResult> {
-        return new Promise((resolve) => {
-            const { transpileModule } = require('typescript');
-            const { spawn } = require('child_process');
+    constructor(private readonly jsCompilerService: JSCompilerService) {}
 
-            let transpiledCode = '';
-            try {
-                const result = transpileModule(code, {
-                    compilerOptions: { module: 1 },
-                });
-                transpiledCode = result.outputText;
-            } catch (err) {
-                return resolve({
+    async compileTS(code: string): Promise<CompilationResult> {
+        const startTime = Date.now();
+
+        try {
+            const typeCheckResult = this.checkTypeErrors(code);
+
+            if (!typeCheckResult.success) {
+                return {
                     success: false,
                     output: '',
-                    error: `Transpilation Error: ${err.message}`,
+                    error: typeCheckResult.error,
                     exitCode: 1,
-                    executionTime: 0,
+                    executionTime: Date.now() - startTime,
                     language: 'TypeScript',
                     timestamp: new Date(),
-                });
+                };
             }
 
-            const child = spawn('docker', [
-                'run',
-                '--rm',
-                '-i',
-                'node:alpine',
-                'node',
-            ]);
+            const transpiledCode = this.transpileCode(code);
 
-            let output = '';
-            let error = '';
-            const startTime = Date.now();
-            let isResolved = false;
+            const jsResult =
+                await this.jsCompilerService.compileJS(transpiledCode);
 
-            const timeout = setTimeout(
-                () => {
-                    if (isResolved) return;
-                    isResolved = true;
-                    child.kill();
-                    const endTime = Date.now();
-                    resolve({
-                        success: false,
-                        output: output,
-                        error: 'Execution timed out',
-                        exitCode: -1,
-                        executionTime: endTime - startTime,
-                        language: 'TypeScript',
-                        timestamp: new Date(),
-                    });
-                },
-                2 * 60 * 1000,
+            return {
+                ...jsResult,
+                language: 'TypeScript',
+                executionTime: Date.now() - startTime,
+            };
+        } catch (err) {
+            return {
+                success: false,
+                output: '',
+                error: `Compilation Error: ${err.message}`,
+                exitCode: 1,
+                executionTime: Date.now() - startTime,
+                language: 'TypeScript',
+                timestamp: new Date(),
+            };
+        }
+    }
+
+    private checkTypeErrors(code: string): {
+        success: boolean;
+        error?: string;
+    } {
+        const fileName = 'input.ts';
+
+        const compilerOptions: ts.CompilerOptions = {
+            target: ts.ScriptTarget.ES2020,
+            module: ts.ModuleKind.CommonJS,
+            lib: ['ES2020'],
+
+            strict: true,
+            noImplicitAny: true,
+            strictNullChecks: true,
+            strictFunctionTypes: true,
+            strictBindCallApply: true,
+
+            noUnusedLocals: true,
+            noUnusedParameters: true,
+            noImplicitReturns: true,
+            noFallthroughCasesInSwitch: true,
+            allowUnreachableCode: false,
+
+            skipLibCheck: true,
+            noEmit: true,
+
+            isolatedModules: false,
+        };
+
+        const compilerHost = ts.createCompilerHost(compilerOptions);
+
+        const originalGetSourceFile = compilerHost.getSourceFile;
+        compilerHost.getSourceFile = (
+            filename,
+            languageVersion,
+            onError,
+            shouldCreateNewSourceFile,
+        ) => {
+            if (filename === fileName) {
+                return ts.createSourceFile(
+                    filename,
+                    code,
+                    languageVersion,
+                    true,
+                );
+            }
+            return originalGetSourceFile.call(
+                compilerHost,
+                filename,
+                languageVersion,
+                onError,
+                shouldCreateNewSourceFile,
             );
+        };
 
-            child.stdout.on('data', (data) => {
-                output += data.toString();
-            });
+        const program = ts.createProgram(
+            [fileName],
+            compilerOptions,
+            compilerHost,
+        );
 
-            child.stderr.on('data', (data) => {
-                error += data.toString();
-            });
+        const allDiagnostics = [
+            ...program.getSyntacticDiagnostics(),
+            ...program.getSemanticDiagnostics(),
+        ];
 
-            child.on('error', (err) => {
-                if (isResolved) return;
-                isResolved = true;
-                clearTimeout(timeout);
-                const endTime = Date.now();
-                resolve({
-                    success: false,
-                    output: output,
-                    error: err.message,
-                    exitCode: -1,
-                    executionTime: endTime - startTime,
-                    language: 'TypeScript',
-                    timestamp: new Date(),
-                });
-            });
+        const diagnostics = allDiagnostics.filter((d) => {
+            if (d.file?.fileName !== fileName) {
+                return false;
+            }
 
-            child.on('close', (code) => {
-                if (isResolved) return;
-                isResolved = true;
-                clearTimeout(timeout);
-                const endTime = Date.now();
-                resolve({
-                    success: code === 0,
-                    output: output,
-                    error: error,
-                    exitCode: code || 0,
-                    executionTime: endTime - startTime,
-                    language: 'TypeScript',
-                    timestamp: new Date(),
-                });
-            });
+            const message = ts.flattenDiagnosticMessageText(
+                d.messageText,
+                '\n',
+            );
+            if (message.includes('Duplicate identifier') && d.code === 2300) {
+                const identifierMatch = message.match(
+                    /Duplicate identifier '(\w+)'/,
+                );
+                if (identifierMatch) {
+                    const identifier = identifierMatch[1];
+                    const commonLibNames = [
+                        'test',
+                        'name',
+                        'length',
+                        'toString',
+                        'constructor',
+                    ];
+                    const occurrences = (
+                        code.match(new RegExp(`\\b${identifier}\\b`, 'g')) || []
+                    ).length;
+                    if (occurrences <= 1) {
+                        return false;
+                    }
+                }
+            }
 
-            child.stdin.write(transpiledCode);
-            child.stdin.end();
+            return true;
         });
+
+        const errors = diagnostics.filter(
+            (d) => d.category === ts.DiagnosticCategory.Error,
+        );
+
+        if (errors.length > 0) {
+            const formatted = errors
+                .map((d) => {
+                    const message = ts.flattenDiagnosticMessageText(
+                        d.messageText,
+                        '\n',
+                    );
+                    if (d.file && d.start !== undefined) {
+                        const { line, character } =
+                            d.file.getLineAndCharacterOfPosition(d.start);
+                        return `Line ${line + 1}, Column ${character + 1}: ${message}`;
+                    }
+                    return message;
+                })
+                .join('\n');
+
+            return {
+                success: false,
+                error: `TypeScript Error:\n${formatted}`,
+            };
+        }
+
+        return { success: true };
+    }
+
+    private transpileCode(code: string): string {
+        const result = ts.transpileModule(code, {
+            compilerOptions: {
+                target: ts.ScriptTarget.ES2020,
+                module: ts.ModuleKind.CommonJS,
+            },
+        });
+
+        return result.outputText;
     }
 }
