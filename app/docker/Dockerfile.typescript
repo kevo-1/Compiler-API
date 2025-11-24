@@ -1,0 +1,9 @@
+FROM node:alpine
+
+WORKDIR /usr/src/app
+
+RUN npm install -g typescript ts-node
+
+RUN echo '{"compilerOptions":{"module":"commonjs","target":"es2020","esModuleInterop":true}}' > /tmp/tsconfig.json
+
+CMD ["ts-node"]
