@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { CompilationResult } from '../../interfaces/compilationResult.interface';
+import { DockerCleanupService } from '../../docker-cleanup.service';
 
 @Injectable()
 export class JSCompilerService {
     private readonly MAX_OUTPUT_SIZE = 1024 * 1024;
+
+    constructor(private readonly cleanupService: DockerCleanupService) {}
 
     async compileJS(code: string): Promise<CompilationResult> {
         return new Promise((resolve) => {
@@ -18,6 +21,8 @@ export class JSCompilerService {
                 'node:alpine',
                 'node',
             ]);
+
+            this.cleanupService.registerProcess(child);
 
             let output = '';
             let error = '';

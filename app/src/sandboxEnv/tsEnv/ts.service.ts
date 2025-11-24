@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { CompilationResult } from '../../interfaces/compilationResult.interface';
+import { DockerCleanupService } from '../../docker-cleanup.service';
 
 @Injectable()
 export class TSCompilerService {
-    private readonly MAX_OUTPUT_SIZE = 1024 * 1024; // 1MB max output
-    private readonly MAX_BUFFER_SIZE = 10 * 1024; // 10KB chunks
+    private readonly MAX_OUTPUT_SIZE = 1024 * 1024;
+
+    constructor(private readonly cleanupService: DockerCleanupService) {}
 
     async compileTS(code: string): Promise<CompilationResult> {
         return new Promise((resolve) => {
@@ -30,7 +32,7 @@ export class TSCompilerService {
                 'run',
                 '--rm',
                 '-i',
-                '--memory=128m', 
+                '--memory=128m',
                 '--cpus=0.5',
                 '--network=none',
                 'ts-runner',
@@ -38,6 +40,8 @@ export class TSCompilerService {
                 '-c',
                 `cat > /tmp/code.ts && ts-node --compilerOptions '${JSON.stringify(compilerOptions)}' /tmp/code.ts`,
             ]);
+
+            this.cleanupService.registerProcess(child);
 
             let output = '';
             let error = '';
@@ -47,24 +51,21 @@ export class TSCompilerService {
             let isResolved = false;
             let outputLimitReached = false;
 
-            const timeout = setTimeout(
-                () => {
-                    if (isResolved) return;
-                    isResolved = true;
-                    child.kill('SIGKILL');
-                    const endTime = Date.now();
-                    resolve({
-                        success: false,
-                        output: output,
-                        error: 'Execution timed out (10 seconds limit)',
-                        exitCode: -1,
-                        executionTime: endTime - startTime,
-                        language: 'TypeScript',
-                        timestamp: new Date(),
-                    });
-                },
-                10 * 1000, // 10 seconds timeout
-            );
+            const timeout = setTimeout(() => {
+                if (isResolved) return;
+                isResolved = true;
+                child.kill('SIGKILL');
+                const endTime = Date.now();
+                resolve({
+                    success: false,
+                    output: output,
+                    error: 'Execution timed out (10 seconds limit)',
+                    exitCode: -1,
+                    executionTime: endTime - startTime,
+                    language: 'TypeScript',
+                    timestamp: new Date(),
+                });
+            }, 10 * 1000);
 
             child.stdout.on('data', (data) => {
                 if (outputLimitReached) return;
