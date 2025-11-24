@@ -1,26 +1,32 @@
 import {
     Controller,
     Post,
+    Get,
     Param,
     Body,
     BadRequestException,
 } from '@nestjs/common';
-import { CompilerService } from './compiler.service';
+import { CompilationQueueService } from './compilation-queue.service';
 import { CompileCodeDto } from './dto/code.dto';
-import { CompilationResult } from './interfaces/compilationResult.interface';
+import { CompilationRequest } from './interfaces/compilation-model.interface';
 
 @Controller('compiler')
 export class CompilerController {
-    constructor(private readonly compilerService: CompilerService) {}
+    constructor(private readonly queueService: CompilationQueueService) {}
 
     @Post(':language')
     async compileCode(
         @Param('language') language: string,
         @Body() compileCodeDto: CompileCodeDto,
-    ): Promise<CompilationResult> {
-        return this.compilerService.routeToCompiler(
-            language,
-            compileCodeDto.code,
-        );
+    ): Promise<{ id: string; status: string }> {
+        const id = this.queueService.enqueue(language, compileCodeDto.code);
+        return { id, status: 'PENDING' };
+    }
+
+    @Get(':id')
+    async getCompilationStatus(
+        @Param('id') id: string,
+    ): Promise<CompilationRequest> {
+        return this.queueService.get(id);
     }
 }
