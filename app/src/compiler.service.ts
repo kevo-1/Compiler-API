@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { JSCompilerService } from './sandboxEnv/jsEnv/js.service';
 import { TSCompilerService } from './sandboxEnv/tsEnv/ts.service';
+import { PyCompilerService } from './sandboxEnv/pyEnv/py.service';
 import { CompilationResult } from './interfaces/compilationResult.interface';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class CompilerService {
     constructor(
         private readonly jsCompiler: JSCompilerService,
         private readonly tsCompiler: TSCompilerService,
+        private readonly pyCompiler: PyCompilerService,
     ) {}
 
     private readonly SUPPORTED_LANGUAGES = [
@@ -18,7 +20,10 @@ export class CompilerService {
         'go',
     ] as const;
 
-    async routeToCompiler(language: string, code: string): Promise<CompilationResult> {
+    async routeToCompiler(
+        language: string,
+        code: string,
+    ): Promise<CompilationResult> {
         const normalizedLanguage = language.toLowerCase().trim();
 
         if (!this.SUPPORTED_LANGUAGES.includes(normalizedLanguage as any)) {
@@ -33,6 +38,9 @@ export class CompilerService {
 
             case 'typescript':
                 return await this.tsCompiler.compileTS(code);
+
+            case 'python':
+                return await this.pyCompiler.compilePy(code);
 
             default:
                 throw new BadRequestException(
