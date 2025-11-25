@@ -4,6 +4,7 @@ import { CompilerService } from './compiler.service';
 import { JSCompilerService } from './sandboxEnv/jsEnv/js.service';
 import { TSCompilerService } from './sandboxEnv/tsEnv/ts.service';
 import { CompilationQueueService } from './compilation-queue.service';
+import { DockerCleanupService } from './docker-cleanup.service';
 
 @Module({
     imports: [],
@@ -13,6 +14,7 @@ import { CompilationQueueService } from './compilation-queue.service';
         JSCompilerService,
         TSCompilerService,
         CompilationQueueService,
+        DockerCleanupService,
     ],
 })
 export class AppModule {}
