@@ -3,6 +3,7 @@ import { JSCompilerService } from './sandboxEnv/jsEnv/js.service';
 import { TSCompilerService } from './sandboxEnv/tsEnv/ts.service';
 import { PyCompilerService } from './sandboxEnv/pyEnv/py.service';
 import { GoCompilerService } from './sandboxEnv/goEnv/go.service';
+import { CCompilerService } from './sandboxEnv/cEnv/c.service';
 import { CompilationResult } from './interfaces/compilationResult.interface';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class CompilerService {
         private readonly tsCompiler: TSCompilerService,
         private readonly pyCompiler: PyCompilerService,
         private readonly goCompiler: GoCompilerService,
+        private readonly cCompiler: CCompilerService,
     ) {}
 
     private readonly SUPPORTED_LANGUAGES = [
@@ -46,6 +48,9 @@ export class CompilerService {
 
             case 'go':
                 return await this.goCompiler.compileGo(code);
+
+            case 'c':
+                return await this.cCompiler.compileC(code);
 
             default:
                 throw new BadRequestException(
