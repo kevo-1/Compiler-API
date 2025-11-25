@@ -3,12 +3,12 @@ import { CompilationResult } from '../../interfaces/compilationResult.interface'
 import { DockerCleanupService } from '../../docker-cleanup.service';
 
 @Injectable()
-export class JSCompilerService {
+export class PyCompilerService {
     private readonly MAX_OUTPUT_SIZE = 1024 * 1024;
 
     constructor(private readonly cleanupService: DockerCleanupService) {}
 
-    async compileJS(code: string): Promise<CompilationResult> {
+    async compilePy(code: string): Promise<CompilationResult> {
         return new Promise((resolve) => {
             const { spawn } = require('child_process');
             const child = spawn('docker', [
@@ -23,9 +23,10 @@ export class JSCompilerService {
                 '--ulimit',
                 'nofile=64:64',
                 '--network=none',
-                '--network=none',
-                'node:alpine',
-                'node',
+                'python:alpine',
+                'python3',
+                '-c',
+                code,
             ]);
 
             this.cleanupService.registerProcess(child);
@@ -49,7 +50,7 @@ export class JSCompilerService {
                     error: 'Execution timed out (5 seconds limit)',
                     exitCode: -1,
                     executionTime: endTime - startTime,
-                    language: 'JavaScript',
+                    language: 'Python',
                     timestamp: new Date(),
                 });
             }, 5 * 1000);
@@ -75,7 +76,7 @@ export class JSCompilerService {
                             error: 'Output limit exceeded (1MB maximum)',
                             exitCode: -1,
                             executionTime: endTime - startTime,
-                            language: 'JavaScript',
+                            language: 'Python',
                             timestamp: new Date(),
                         });
                     }
@@ -87,6 +88,18 @@ export class JSCompilerService {
 
             child.stderr.on('data', (data) => {
                 const dataStr = data.toString();
+
+                if (
+                    dataStr.includes('Pulling from library') ||
+                    dataStr.includes('Pulling fs layer') ||
+                    dataStr.includes('Download complete') ||
+                    dataStr.includes('Pull complete') ||
+                    dataStr.includes('Digest: sha256') ||
+                    dataStr.includes('Status: Downloaded newer image')
+                ) {
+                    return;
+                }
+
                 errorSize += dataStr.length;
 
                 if (errorSize > this.MAX_OUTPUT_SIZE) {
@@ -109,7 +122,7 @@ export class JSCompilerService {
                     error: err.message,
                     exitCode: -1,
                     executionTime: endTime - startTime,
-                    language: 'JavaScript',
+                    language: 'Python',
                     timestamp: new Date(),
                 });
             });
@@ -125,12 +138,11 @@ export class JSCompilerService {
                     error: error,
                     exitCode: code || 0,
                     executionTime: endTime - startTime,
-                    language: 'JavaScript',
+                    language: 'Python',
                     timestamp: new Date(),
                 });
             });
 
-            child.stdin.write(code);
             child.stdin.end();
         });
     }
