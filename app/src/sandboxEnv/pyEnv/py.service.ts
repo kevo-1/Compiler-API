@@ -43,13 +43,13 @@ export class PyCompilerService {
                 resolve({
                     success: false,
                     output: output,
-                    error: 'Execution timed out (10 seconds limit)',
+                    error: 'Execution timed out (5 seconds limit)',
                     exitCode: -1,
                     executionTime: endTime - startTime,
                     language: 'Python',
                     timestamp: new Date(),
                 });
-            }, 10 * 1000);
+            }, 5 * 1000);
 
             child.stdout.on('data', (data) => {
                 if (outputLimitReached) return;
@@ -84,6 +84,18 @@ export class PyCompilerService {
 
             child.stderr.on('data', (data) => {
                 const dataStr = data.toString();
+
+                if (
+                    dataStr.includes('Pulling from library') ||
+                    dataStr.includes('Pulling fs layer') ||
+                    dataStr.includes('Download complete') ||
+                    dataStr.includes('Pull complete') ||
+                    dataStr.includes('Digest: sha256') ||
+                    dataStr.includes('Status: Downloaded newer image')
+                ) {
+                    return;
+                }
+
                 errorSize += dataStr.length;
 
                 if (errorSize > this.MAX_OUTPUT_SIZE) {

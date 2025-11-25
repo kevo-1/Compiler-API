@@ -33,24 +33,21 @@ export class JSCompilerService {
             let isResolved = false;
             let outputLimitReached = false;
 
-            const timeout = setTimeout(
-                () => {
-                    if (isResolved) return;
-                    isResolved = true;
-                    child.kill('SIGKILL');
-                    const endTime = Date.now();
-                    resolve({
-                        success: false,
-                        output: output,
-                        error: 'Execution timed out (2 minutes limit)',
-                        exitCode: -1,
-                        executionTime: endTime - startTime,
-                        language: 'JavaScript',
-                        timestamp: new Date(),
-                    });
-                },
-                2 * 60 * 1000,
-            );
+            const timeout = setTimeout(() => {
+                if (isResolved) return;
+                isResolved = true;
+                child.kill('SIGKILL');
+                const endTime = Date.now();
+                resolve({
+                    success: false,
+                    output: output,
+                    error: 'Execution timed out (5 seconds limit)',
+                    exitCode: -1,
+                    executionTime: endTime - startTime,
+                    language: 'JavaScript',
+                    timestamp: new Date(),
+                });
+            }, 5 * 1000);
 
             child.stdout.on('data', (data) => {
                 if (outputLimitReached) return;
