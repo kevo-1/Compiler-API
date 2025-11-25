@@ -33,6 +33,7 @@ export class TSCompilerService {
                 '--rm',
                 '-i',
                 '--memory=128m',
+                '--memory-swap=128m',
                 '--cpus=0.5',
                 '--network=none',
                 'ts-runner',

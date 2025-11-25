@@ -16,6 +16,7 @@ export class PyCompilerService {
                 '--rm',
                 '-i',
                 '--memory=128m',
+                '--memory-swap=128m',
                 '--cpus=0.5',
                 '--network=none',
                 'python:alpine',
