@@ -15,13 +15,19 @@ export class CCompilerService {
                 'run',
                 '--rm',
                 '-i',
-                '--memory=128m',
+                '--memory=256m',
+                '--memory-swap=256m',
                 '--cpus=0.5',
+                '--pids-limit=50',
+                '--ulimit',
+                'cpu=10:10',
+                '--ulimit',
+                'nofile=64:64',
                 '--network=none',
-                'gcc:latest',
+                'c-runner',
                 'sh',
                 '-c',
-                `cat > /tmp/code.c && gcc /tmp/code.c -o /tmp/code.out && /tmp/code.out`,
+                'cat > /tmp/code.c && gcc -Wall -Wextra -o /tmp/code.out /tmp/code.c 2>&1 && timeout 8s /tmp/code.out',
             ]);
 
             this.cleanupService.registerProcess(child);
@@ -42,13 +48,13 @@ export class CCompilerService {
                 resolve({
                     success: false,
                     output: output,
-                    error: 'Execution timed out (10 seconds limit)',
+                    error: 'Execution timed out (15 seconds limit)',
                     exitCode: -1,
                     executionTime: endTime - startTime,
                     language: 'C',
                     timestamp: new Date(),
                 });
-            }, 10 * 1000);
+            }, 15 * 1000);
 
             child.stdout.on('data', (data) => {
                 if (outputLimitReached) return;
@@ -83,6 +89,22 @@ export class CCompilerService {
 
             child.stderr.on('data', (data) => {
                 const dataStr = data.toString();
+
+                if (
+                    dataStr.includes('Unable to find image') ||
+                    dataStr.includes('Pulling from library') ||
+                    dataStr.includes('Pulling fs layer') ||
+                    dataStr.includes('Downloading') ||
+                    dataStr.includes('Download complete') ||
+                    dataStr.includes('Extracting') ||
+                    dataStr.includes('Pull complete') ||
+                    dataStr.includes('Digest: sha256') ||
+                    dataStr.includes('Status: Downloaded newer image') ||
+                    dataStr.includes('Verifying Checksum')
+                ) {
+                    return;
+                }
+
                 errorSize += dataStr.length;
 
                 if (errorSize > this.MAX_OUTPUT_SIZE) {
@@ -115,10 +137,24 @@ export class CCompilerService {
                 isResolved = true;
                 clearTimeout(timeout);
                 const endTime = Date.now();
+
+                let finalError = error;
+
+                if (code === 137 || (code === 1 && error.includes('Killed'))) {
+                    finalError =
+                        'Memory limit exceeded (256MB maximum)\n' + error;
+                } else if (error.includes('Segmentation fault')) {
+                    finalError =
+                        'Runtime Error: Segmentation fault (invalid memory access)\n' +
+                        error;
+                } else if (error.includes('/tmp/code.c:')) {
+                    finalError = error.replace(/\/tmp\/code\.c:/g, 'Line ');
+                }
+
                 resolve({
                     success: code === 0 && !outputLimitReached,
                     output: output,
-                    error: error,
+                    error: finalError,
                     exitCode: code || 0,
                     executionTime: endTime - startTime,
                     language: 'C',
