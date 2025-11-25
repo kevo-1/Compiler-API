@@ -32,8 +32,14 @@ export class TSCompilerService {
                 'run',
                 '--rm',
                 '-i',
-                '--memory=128m',
-                '--cpus=0.5',
+                '--memory=64m',
+                '--cpus=0.25',
+                '--pids-limit=20',
+                '--ulimit',
+                'cpu=2:2',
+                '--ulimit',
+                'nofile=64:64',
+                '--network=none',
                 '--network=none',
                 'ts-runner',
                 'sh',
@@ -59,13 +65,13 @@ export class TSCompilerService {
                 resolve({
                     success: false,
                     output: output,
-                    error: 'Execution timed out (10 seconds limit)',
+                    error: 'Execution timed out (5 seconds limit)',
                     exitCode: -1,
                     executionTime: endTime - startTime,
                     language: 'TypeScript',
                     timestamp: new Date(),
                 });
-            }, 10 * 1000);
+            }, 5 * 1000);
 
             child.stdout.on('data', (data) => {
                 if (outputLimitReached) return;
